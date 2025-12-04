@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import Image from "next/image";
+import { useCredits } from "../contexts/CreditsContext";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -19,6 +20,7 @@ interface UploadModalProps {
 type Step = "input" | "transcribing" | "review";
 
 export function UploadModal({ onClose, onSubmit, isLoading }: UploadModalProps) {
+  const { getToken } = useCredits();
   const [step, setStep] = useState<Step>("input");
   const [isDragging, setIsDragging] = useState(false);
   const [topic, setTopic] = useState("");
@@ -124,6 +126,11 @@ export function UploadModal({ onClose, onSubmit, isLoading }: UploadModalProps) 
     setTranscriptionProgress("Uploading audio files...");
 
     try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error("Please sign in to transcribe audio");
+      }
+
       const formData = new FormData();
       audioFiles.forEach((file) => formData.append("audio", file));
 
@@ -131,6 +138,9 @@ export function UploadModal({ onClose, onSubmit, isLoading }: UploadModalProps) 
 
       const response = await fetch(`${API_URL}/transcribe`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
         body: formData,
       });
 

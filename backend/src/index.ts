@@ -533,8 +533,8 @@ app.post("/verify", async (c) => {
   }
 });
 
-// Transcribe audio only
-app.post("/transcribe", async (c) => {
+// Transcribe audio only (requires auth to prevent abuse)
+app.post("/transcribe", requireAuth, async (c) => {
   try {
     const formData = await c.req.formData();
     const audioFiles = formData.getAll("audio");
