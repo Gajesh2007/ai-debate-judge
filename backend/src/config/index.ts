@@ -59,3 +59,17 @@ export const config = {
   whisperChunkSizeMb: transcriptionConfig.openai.chunkSizeMb,
   port: parseInt(process.env.PORT || "3001", 10),
 };
+
+// Stripe configuration
+export const stripeConfig = {
+  secretKey: process.env.STRIPE_SECRET_KEY || "",
+  webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
+  // Credit packs: price in cents, credits granted
+  packs: [
+    { id: "pack_1", name: "1 Analysis", price: 500, credits: 1 },
+    { id: "pack_5", name: "5 Analyses", price: 2000, credits: 5 },
+    { id: "pack_10", name: "10 Analyses", price: 3500, credits: 10 },
+  ],
+  successUrl: process.env.STRIPE_SUCCESS_URL || "https://getjudgedbyai.com/credits/success",
+  cancelUrl: process.env.STRIPE_CANCEL_URL || "https://getjudgedbyai.com/credits/cancel",
+};

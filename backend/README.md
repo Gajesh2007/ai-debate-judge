@@ -20,6 +20,10 @@ pnpm build && pnpm start
 Create a `.env` file:
 
 ```bash
+# ===================
+# AI & Transcription
+# ===================
+
 # Required: AI Gateway API Key (for multi-provider LLM access)
 AI_GATEWAY_API_KEY=your_gateway_key
 
@@ -33,28 +37,86 @@ TRANSCRIPTION_PROVIDER=openai
 # Lemonfox has speaker diarization and is cheaper ($0.50/3hrs vs OpenAI ~$0.36/hr)
 LEMONFOX_API_KEY=...
 
+# ===================
+# Cryptographic Signing
+# ===================
+
 # Required: Wallet mnemonic for signing verdicts (12 or 24 words)
 MNEMONIC=word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12
 
-# Optional: PostgreSQL connection (for persistence)
+# ===================
+# Database
+# ===================
+
+# Required: PostgreSQL connection
 DATABASE_URL=postgres://user:pass@localhost:5432/aijudge
+
+# ===================
+# Authentication (Clerk)
+# ===================
+
+# Required: Clerk API keys (from dashboard.clerk.com)
+# Use sk_test_/pk_test_ for development, sk_live_/pk_live_ for production
+CLERK_SECRET_KEY=sk_test_xxxxx
+CLERK_PUBLISHABLE_KEY=pk_test_xxxxx
+
+# ===================
+# Payments (Stripe)
+# ===================
+
+# Required: Stripe API keys (from dashboard.stripe.com)
+# Use sk_test_ for development, sk_live_ for production
+STRIPE_SECRET_KEY=sk_test_xxxxx
+
+# Required: Stripe webhook signing secret
+# Get this when creating webhook endpoint in Stripe dashboard
+# For local dev, use: stripe listen --forward-to localhost:3001/webhooks/stripe
+STRIPE_WEBHOOK_SECRET=whsec_xxxxx
+
+# Optional: Custom success/cancel URLs (defaults to getjudgedbyai.com)
+STRIPE_SUCCESS_URL=https://getjudgedbyai.com/credits/success
+STRIPE_CANCEL_URL=https://getjudgedbyai.com/credits/cancel
+
+# ===================
+# Server
+# ===================
 
 # Optional: Server port (default 3001)
 PORT=3001
+
+# Optional: Environment (development/production)
+NODE_ENV=development
 ```
 
 ## API Endpoints
 
+### Public
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check + signer address |
-| POST | `/judge` | Full pipeline: audio/transcript → council → signed verdict |
+| GET | `/models` | List available council models |
 | GET | `/judgments` | List judgments (paginated) |
 | GET | `/judgments/:id` | Get full judgment by ID |
+| GET | `/judgments/search` | Search judgments |
 | POST | `/verify` | Verify a signed verdict |
 | GET | `/signer` | Get expected signer address |
-| POST | `/format` | Format transcript only |
+| GET | `/credits/packs` | List available credit packs |
+
+### Authenticated (Clerk JWT required)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/judge/stream` | Full pipeline with SSE progress |
 | POST | `/transcribe` | Transcribe audio only |
+| GET | `/credits` | Get user's credit balance |
+| POST | `/checkout` | Create Stripe checkout session |
+
+### Webhooks
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/webhooks/stripe` | Stripe payment webhooks |
 
 ### POST `/judge`
 
@@ -99,9 +161,23 @@ curl -X POST http://localhost:3001/judge \
 }
 ```
 
+## Pricing Model
+
+| Mode | Cost | Description |
+|------|------|-------------|
+| Default Council | 1 credit | 5 frontier AI models |
+| Custom Models | 1 credit/model | Pick specific models |
+
+Credit packs configured in `src/config/index.ts`:
+- 1 Analysis: $5.00
+- 5 Analyses: $20.00 ($4.00/each)
+- 10 Analyses: $35.00 ($3.50/each)
+
+Coupons can be created in Stripe Dashboard and are automatically available at checkout.
+
 ## Council Models
 
-Six reasoning models evaluate each debate:
+Five reasoning models evaluate each debate:
 
 | Model | Provider |
 |-------|----------|
@@ -110,7 +186,31 @@ Six reasoning models evaluate each debate:
 | `claude-opus-4.5` | Anthropic |
 | `gpt-5.1-thinking` | OpenAI |
 | `deepseek-v3.2-thinking` | DeepSeek |
-| `kimi-k2-thinking-turbo` | Moonshot |
+
+## Stripe Webhook Setup
+
+### Production
+
+1. Go to **Stripe Dashboard → Developers → Webhooks**
+2. Click **Add endpoint**
+3. **Endpoint URL:** `https://api.getjudgedbyai.com/webhooks/stripe`
+4. **Events to listen to:** `checkout.session.completed`
+5. Copy the **Signing secret** to `STRIPE_WEBHOOK_SECRET`
+
+### Local Development
+
+```bash
+# Install Stripe CLI
+brew install stripe/stripe-cli/stripe
+
+# Login
+stripe login
+
+# Forward webhooks to local server
+stripe listen --forward-to localhost:3001/webhooks/stripe
+```
+
+Copy the webhook signing secret from the CLI output.
 
 ## Docker
 
@@ -124,6 +224,10 @@ docker run -p 3001:3001 \
   -e OPENAI_API_KEY=... \
   -e MNEMONIC="..." \
   -e DATABASE_URL=... \
+  -e CLERK_SECRET_KEY=... \
+  -e CLERK_PUBLISHABLE_KEY=... \
+  -e STRIPE_SECRET_KEY=... \
+  -e STRIPE_WEBHOOK_SECRET=... \
   ai-judge-backend
 ```
 
@@ -148,15 +252,18 @@ PostgreSQL is optional but recommended for persistence. The schema is auto-creat
 
 ```
 src/
-├── config/         # LLM providers, council models
-├── db/             # PostgreSQL client, schema, repository
-├── schemas/        # Zod schemas for structured outputs
+├── config/           # LLM providers, council models, pricing
+├── db/               # PostgreSQL client, schema, repository
+├── middleware/
+│   └── auth.ts       # Clerk JWT verification
+├── schemas/          # Zod schemas for structured outputs
 ├── services/
-│   ├── transcription.ts  # Whisper
+│   ├── transcription.ts  # Whisper / Lemonfox
 │   ├── formatting.ts     # Gemini 2.5 Flash
-│   ├── council.ts        # 6 LLMs evaluate in parallel
-│   └── signing.ts        # viem wallet signing
-├── utils/          # Retry logic
-└── index.ts        # Hono server
+│   ├── council.ts        # 5 LLMs evaluate in parallel
+│   ├── signing.ts        # viem wallet signing
+│   └── payments.ts       # Stripe + credit management
+├── utils/            # Retry logic
+└── index.ts          # Hono server + routes
 ```
 

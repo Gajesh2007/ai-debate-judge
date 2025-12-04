@@ -10,11 +10,37 @@ import { runCouncil } from "./services/council.js";
 import { signVerdict, getSignerAddress, verifySignedVerdict } from "./services/signing.js";
 import { JudgeRequestSchema, type DebateMetadata } from "./schemas/index.js";
 import { initSchema, saveJudgment, getJudgment, listJudgments, searchJudgments, getSql } from "./db/index.js";
+import {
+  initPaymentSchema,
+  createCheckoutSession,
+  handleStripeWebhook,
+  getCredits,
+  useCredits,
+  refundCredits,
+  calculateCost,
+  getCreditPacks,
+} from "./services/payments.js";
+import { requireAuth, getAuth } from "./middleware/auth.js";
 
 const app = new Hono();
 
-// Middleware
-app.use("*", cors());
+// Allowed origins - production domain only (+ localhost for dev)
+const ALLOWED_ORIGINS = [
+  "https://getjudgedbyai.com",
+  "https://www.getjudgedbyai.com",
+  ...(process.env.NODE_ENV !== "production" ? ["http://localhost:3000"] : []),
+];
+
+// Middleware - restricted CORS
+app.use("*", cors({
+  origin: (origin) => {
+    if (!origin) return ALLOWED_ORIGINS[0]; // Allow server-to-server
+    return ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  },
+  allowMethods: ["GET", "POST", "OPTIONS"],
+  allowHeaders: ["Content-Type", "stripe-signature"],
+  credentials: true,
+}));
 app.use("*", logger());
 
 // Health check
@@ -159,7 +185,9 @@ app.post("/judge", async (c) => {
 });
 
 // Streaming judge endpoint with progress updates via SSE
-app.post("/judge/stream", async (c) => {
+// REQUIRES: Clerk auth with valid credits
+app.post("/judge/stream", requireAuth, async (c) => {
+  const auth = getAuth(c);
   const contentType = c.req.header("content-type") || "";
 
   let topic: string;
@@ -167,6 +195,7 @@ app.post("/judge/stream", async (c) => {
   let thumbnail: string | undefined;
   let transcript: string | undefined;
   let customModels: { id: string; name: string; supportsReasoningEffort?: boolean }[] | undefined;
+  let creditCost = 1; // Default cost, will be recalculated
 
   try {
     if (contentType.includes("multipart/form-data")) {
@@ -196,6 +225,25 @@ app.post("/judge/stream", async (c) => {
     if (!transcript) {
       return c.json({ error: "Transcript is required (use /transcribe first for audio)" }, 400);
     }
+
+    // Calculate cost: default council = 1 credit, custom models = 1 credit per model
+    creditCost = calculateCost(customModels?.length);
+    const modelDescription = customModels?.length 
+      ? `Custom analysis (${customModels.length} models)` 
+      : "Council analysis (5 models)";
+
+    // Check and use credits
+    const creditResult = await useCredits(auth.userId, auth.email, creditCost, undefined, modelDescription);
+    if (!creditResult.success) {
+      return c.json({ 
+        error: "Insufficient credits", 
+        credits: creditResult.remaining,
+        required: creditCost,
+        message: `This analysis costs ${creditCost} credit${creditCost > 1 ? "s" : ""}. Purchase more to continue.`,
+      }, 402);
+    }
+
+    console.log(`${creditCost} credit(s) used, remaining: ${creditResult.remaining}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid request";
     return c.json({ error: message }, 400);
@@ -203,6 +251,8 @@ app.post("/judge/stream", async (c) => {
 
   const metadata: DebateMetadata = { topic, description, thumbnail };
   const rawTranscript = transcript;
+  const userAuth = auth;
+  const costToRefund = creditCost;
 
   // Use custom models or default council
   const modelsToUse = customModels?.length ? customModels : COUNCIL_MODELS;
@@ -349,10 +399,22 @@ app.post("/judge/stream", async (c) => {
       });
     } catch (error) {
       console.error("Streaming judge error:", error);
+      
+      // Refund the credits on failure
+      if (userAuth) {
+        try {
+          await refundCredits(userAuth.userId, costToRefund);
+          console.log(`${costToRefund} credit(s) refunded due to error`);
+        } catch (refundError) {
+          console.error("Failed to refund credit:", refundError);
+        }
+      }
+      
       await stream.writeSSE({
         data: JSON.stringify({
           step: "error",
           error: error instanceof Error ? error.message : "Unknown error",
+          creditRefunded: true,
         }),
         event: "error",
       });
@@ -486,12 +548,93 @@ app.post("/transcribe", async (c) => {
   }
 });
 
+// ============================================
+// PAYMENT ENDPOINTS
+// ============================================
+
+// Get available credit packs
+app.get("/credits/packs", (c) => {
+  return c.json({
+    success: true,
+    packs: getCreditPacks(),
+  });
+});
+
+// Get own credit balance (requires auth)
+app.get("/credits/me", requireAuth, async (c) => {
+  try {
+    const auth = getAuth(c);
+    const result = await getCredits(auth.userId);
+    
+    return c.json({
+      success: true,
+      email: result?.email || auth.email,
+      credits: result?.credits || 0,
+    });
+  } catch (error) {
+    console.error("Get credits error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return c.json({ error: message }, 500);
+  }
+});
+
+// Create Stripe checkout session (requires auth)
+app.post("/checkout", requireAuth, async (c) => {
+  try {
+    const auth = getAuth(c);
+    const { packId } = await c.req.json();
+
+    if (!packId) {
+      return c.json({ error: "packId is required" }, 400);
+    }
+
+    const result = await createCheckoutSession(auth.userId, auth.email, packId);
+    
+    return c.json({
+      success: true,
+      url: result.url,
+      sessionId: result.sessionId,
+    });
+  } catch (error) {
+    console.error("Checkout error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return c.json({ error: message }, 500);
+  }
+});
+
+// Stripe webhook handler
+app.post("/webhooks/stripe", async (c) => {
+  try {
+    const signature = c.req.header("stripe-signature");
+    if (!signature) {
+      return c.json({ error: "Missing stripe-signature header" }, 400);
+    }
+
+    // Get raw body for signature verification
+    const payload = await c.req.text();
+    
+    const result = await handleStripeWebhook(payload, signature);
+    
+    if (!result.received) {
+      return c.json({ error: result.error }, 400);
+    }
+
+    return c.json({ received: true, type: result.type });
+  } catch (error) {
+    console.error("Webhook error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return c.json({ error: message }, 500);
+  }
+});
+
 // Initialize and start server
 async function start() {
-  // Initialize database schema
+  // Initialize database schemas
   await initSchema();
+  await initPaymentSchema();
 
   console.log(`Starting AI Judge backend on port ${config.port}...`);
+  console.log(`CORS restricted to: ${ALLOWED_ORIGINS.join(", ")}`);
   serve({
     fetch: app.fetch,
     port: config.port,

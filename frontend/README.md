@@ -20,8 +20,29 @@ npm run build && npm start
 Create a `.env.local` file:
 
 ```bash
+# ===================
+# API
+# ===================
+
 # Backend API URL (default: http://localhost:3001)
 NEXT_PUBLIC_API_URL=http://localhost:3001
+
+# ===================
+# Authentication (Clerk)
+# ===================
+
+# Required: Clerk API keys (from dashboard.clerk.com)
+# Use pk_test_/sk_test_ for development, pk_live_/sk_live_ for production
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_xxxxx
+CLERK_SECRET_KEY=sk_test_xxxxx
+
+# Optional: Clerk sign-in/sign-up URLs
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+
+# ===================
+# Storage
+# ===================
 
 # Vercel Blob token (for thumbnail uploads)
 BLOB_READ_WRITE_TOKEN=vercel_blob_...

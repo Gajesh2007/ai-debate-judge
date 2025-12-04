@@ -9,6 +9,8 @@ import { EmptyState } from "./components/EmptyState";
 import { UploadModal } from "./components/UploadModal";
 import { ProgressModal } from "./components/ProgressModal";
 import { VerdictCard } from "./components/VerdictCard";
+import { PurchaseModal } from "./components/PurchaseModal";
+import { useCredits } from "./contexts/CreditsContext";
 import type { JudgmentSummary } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -36,8 +38,10 @@ type SortOrder = "newest" | "oldest";
 
 export default function Home() {
   const router = useRouter();
+  const { isSignedIn, credits, refreshCredits, getToken } = useCredits();
   const [showIntro, setShowIntro] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showPurchase, setShowPurchase] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progressState, setProgressState] = useState<ProgressState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +105,11 @@ export default function Home() {
   }
 
   function handleOpenUpload() {
+    // Check if user is signed in and has credits
+    if (!isSignedIn || credits < 1) {
+      setShowPurchase(true);
+      return;
+    }
     setShowUpload(true);
     setError(null);
   }
@@ -111,6 +120,12 @@ export default function Home() {
     thumbnail?: string;
     transcript?: string;
   }) {
+    // Double check signed in
+    if (!isSignedIn) {
+      setShowPurchase(true);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setShowUpload(false);
@@ -121,9 +136,14 @@ export default function Home() {
     });
 
     try {
+      const token = await getToken();
+      
       const response = await fetch(`${API_URL}/judge/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           topic: data.topic,
           description: data.description,
@@ -134,6 +154,15 @@ export default function Home() {
 
       if (!response.ok) {
         const json = await response.json();
+        
+        // Handle insufficient credits
+        if (response.status === 402) {
+          setProgressState(null);
+          setIsLoading(false);
+          setShowPurchase(true);
+          return;
+        }
+        
         throw new Error(json.error || "Failed to analyze debate");
       }
 
@@ -166,10 +195,15 @@ export default function Home() {
                 const debateId = eventData.result.id;
                 setProgressState(null);
                 fetchJudgments();
+                refreshCredits(); // Update credit balance
                 if (debateId) {
                   router.push(`/debate/${debateId}`);
                 }
               } else if (eventData.step === "error") {
+                // Credit was refunded on error
+                if (eventData.creditRefunded) {
+                  refreshCredits();
+                }
                 throw new Error(eventData.error || "Unknown error");
               } else {
                 setProgressState((prev) => ({
@@ -304,6 +338,16 @@ export default function Home() {
           isLoading={isLoading}
         />
       )}
+
+      {/* Purchase modal */}
+      <PurchaseModal
+        isOpen={showPurchase}
+        onClose={() => setShowPurchase(false)}
+        onSuccess={() => {
+          setShowPurchase(false);
+          refreshCredits();
+        }}
+      />
 
       {/* Progress modal */}
       {progressState && (

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { SignInButton, UserButton } from "@clerk/nextjs";
+import { useCredits } from "../contexts/CreditsContext";
 
 interface HeaderProps {
   onNewDebate: () => void;
@@ -8,6 +10,7 @@ interface HeaderProps {
 
 export function Header({ onNewDebate }: HeaderProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const { isSignedIn, credits } = useCredits();
 
   return (
     <header className="header sticky top-0 z-50">
@@ -70,7 +73,18 @@ export function Header({ onNewDebate }: HeaderProps) {
           </span>
         </a>
 
-        {/* Action */}
+        {/* Right side */}
+        <div className="flex items-center gap-4">
+          {isSignedIn ? (
+            <>
+              {/* Credit balance */}
+              <div className="hidden sm:flex items-center gap-2 text-sm">
+                <span className="font-mono font-medium text-[var(--accent-mint)] bg-[var(--accent-mint)]/10 px-2 py-0.5 rounded">
+                  {credits} credit{credits !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {/* Action button */}
         <button
           type="button"
           onClick={onNewDebate}
@@ -79,8 +93,30 @@ export function Header({ onNewDebate }: HeaderProps) {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Judge a Debate
+                {credits > 0 ? "Judge a Debate" : "Get Credits"}
+              </button>
+
+              {/* User menu */}
+              <UserButton 
+                afterSignOutUrl="/"
+                appearance={{
+                  elements: {
+                    avatarBox: "w-9 h-9",
+                  },
+                }}
+              />
+            </>
+          ) : (
+            <SignInButton mode="modal">
+              <button
+                type="button"
+                className="btn-primary flex items-center gap-2 text-sm py-2.5 px-4"
+              >
+                Sign In to Start
         </button>
+            </SignInButton>
+          )}
+        </div>
       </div>
     </header>
   );
