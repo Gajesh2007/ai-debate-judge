@@ -9,7 +9,7 @@ import {
 } from "../schemas/index.js";
 import { withRetry } from "../utils/retry.js";
 
-const JUDGE_SYSTEM_PROMPT = `You are an expert debate judge with decades of experience evaluating competitive debates. Your role is to provide a fair, thorough, and well-reasoned evaluation of the debate.
+export const JUDGE_SYSTEM_PROMPT = `You are an expert debate judge with decades of experience evaluating competitive debates. Your role is to provide a fair, thorough, and well-reasoned evaluation of the debate.
 
 Evaluation Criteria (each scored 0-10):
 1. ARGUMENTATION: Quality, logic, and structure of arguments
@@ -29,6 +29,30 @@ Your evaluation must be:
 - Based solely on the debate content
 - Well-reasoned with specific references to the debate
 - Clear about which speaker won and why`;
+
+/**
+ * Build the user prompt for a judge given a transcript
+ */
+export function buildJudgePrompt(transcript: FormattedTranscript): string {
+  return `Please evaluate the following debate:
+
+Topic: ${transcript.topic}
+
+Speakers:
+${transcript.speakers.map((s) => `- ${s.id}: ${s.position}`).join("\n")}
+
+Debate Transcript:
+${transcript.segments.map((s) => `[${s.speaker}]: ${s.text}`).join("\n\n")}
+
+Summary: ${transcript.summary}
+
+Provide your complete evaluation. Remember to:
+1. Set "winner" to one of the speaker IDs: ${transcript.speakers.map((s) => s.id).join(", ")}
+2. Set "confidence" to a number between 0 and 100
+3. Include scores for EACH speaker with argumentation, evidence, delivery, rebuttal, and total
+4. Provide detailed "reasoning"
+5. Include "keyMoments" array (can be empty [])`;
+}
 
 export type CouncilProgressCallback = (progress: {
   step: "judge_started" | "judge_completed" | "judge_failed" | "aggregating";
@@ -62,24 +86,7 @@ async function getJudgeEvaluation(
           model: gateway(council.id),
           schema: JudgeEvaluationSchema,
           system: JUDGE_SYSTEM_PROMPT,
-          prompt: `Please evaluate the following debate:
-
-Topic: ${transcript.topic}
-
-Speakers:
-${transcript.speakers.map((s) => `- ${s.id}: ${s.position}`).join("\n")}
-
-Debate Transcript:
-${transcript.segments.map((s) => `[${s.speaker}]: ${s.text}`).join("\n\n")}
-
-Summary: ${transcript.summary}
-
-Provide your complete evaluation. Remember to:
-1. Set "winner" to one of the speaker IDs: ${transcript.speakers.map((s) => s.id).join(", ")}
-2. Set "confidence" to a number between 0 and 100
-3. Include scores for EACH speaker with argumentation, evidence, delivery, rebuttal, and total
-4. Provide detailed "reasoning"
-5. Include "keyMoments" array (can be empty [])`,
+          prompt: buildJudgePrompt(transcript),
           // Enable high reasoning effort for OpenAI models that support it
           ...(council.supportsReasoningEffort && {
             providerOptions: {

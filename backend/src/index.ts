@@ -6,7 +6,7 @@ import { streamSSE } from "hono/streaming";
 import { config, COUNCIL_MODELS } from "./config/index.js";
 import { transcribeAudio } from "./services/transcription.js";
 import { formatTranscript, moderateContent } from "./services/formatting.js";
-import { runCouncil } from "./services/council.js";
+import { runCouncil, JUDGE_SYSTEM_PROMPT, buildJudgePrompt } from "./services/council.js";
 import { signVerdict, getSignerAddress, verifySignedVerdict } from "./services/signing.js";
 import { JudgeRequestSchema, type DebateMetadata } from "./schemas/index.js";
 import { initSchema, saveJudgment, getJudgment, listJudgments, searchJudgments, getSql } from "./db/index.js";
@@ -382,7 +382,12 @@ app.post("/judge/stream", requireAuth, async (c) => {
 
       const judgmentId = await saveJudgment(metadata, formattedTranscript, signedVerdict);
 
-      // Complete
+      // Complete - include prompts for transparency
+      const prompts = {
+        system: JUDGE_SYSTEM_PROMPT,
+        user: buildJudgePrompt(formattedTranscript),
+      };
+
       await stream.writeSSE({
         data: JSON.stringify({
           step: "complete",
@@ -393,6 +398,7 @@ app.post("/judge/stream", requireAuth, async (c) => {
             id: judgmentId,
             formattedTranscript,
             signedVerdict,
+            prompts,
           },
         }),
         event: "complete",
@@ -432,7 +438,13 @@ app.get("/judgments/:id", async (c) => {
       return c.json({ error: "Judgment not found" }, 404);
     }
 
-    return c.json({ success: true, judgment });
+    // Reconstruct prompts from the transcript for transparency
+    const prompts = judgment.formattedTranscript ? {
+      system: JUDGE_SYSTEM_PROMPT,
+      user: buildJudgePrompt(judgment.formattedTranscript),
+    } : null;
+
+    return c.json({ success: true, judgment, prompts });
   } catch (error) {
     console.error("Get judgment error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";

@@ -6,6 +6,7 @@ import { ScoreBreakdown } from "./ScoreBreakdown";
 import { JudgeAccordion } from "./JudgeAccordion";
 import { ShareModal } from "./ShareModal";
 import { TranscriptViewer } from "./TranscriptViewer";
+import { PromptsViewer } from "./PromptsViewer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -312,6 +313,11 @@ export function ResultView({ result, onBack, debateId }: ResultViewProps) {
 
       {/* Full transcript */}
       <TranscriptViewer transcript={formattedTranscript} />
+
+      {/* AI Prompts - for transparency */}
+      {result.prompts && (
+        <PromptsViewer prompts={result.prompts} />
+      )}
 
       {/* Share Modal */}
       {showShare && debateUrl && (

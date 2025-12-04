@@ -84,10 +84,16 @@ export interface JudgmentRecord extends JudgmentSummary {
   signedAt: number;
 }
 
+export interface JudgePrompts {
+  system: string;
+  user: string;
+}
+
 export interface JudgeResponse {
   success: boolean;
   id: string | null;
   formattedTranscript: FormattedTranscript;
   signedVerdict: SignedVerdict;
+  prompts?: JudgePrompts;
 }
 

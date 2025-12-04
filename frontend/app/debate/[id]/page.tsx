@@ -64,6 +64,7 @@ export default function DebatePage({ params }: { params: Promise<{ id: string }>
             signerAddress: judgment.signerAddress,
             timestamp: judgment.signedAt,
           },
+          prompts: data.prompts || undefined,
         };
 
         setResult(judgeResponse);
