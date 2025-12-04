@@ -38,7 +38,7 @@ app.use("*", cors({
     return ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   },
   allowMethods: ["GET", "POST", "OPTIONS"],
-  allowHeaders: ["Content-Type", "stripe-signature"],
+  allowHeaders: ["Content-Type", "Authorization", "stripe-signature"],
   credentials: true,
 }));
 app.use("*", logger());
