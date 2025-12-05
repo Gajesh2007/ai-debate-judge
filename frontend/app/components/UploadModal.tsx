@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import Image from "next/image";
+import { upload } from "@vercel/blob/client";
 import { useCredits } from "../contexts/CreditsContext";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -131,27 +132,19 @@ export function UploadModal({ onClose, onSubmit, isLoading }: UploadModalProps) 
         throw new Error("Please sign in to transcribe audio");
       }
 
-      // Step 1: Upload audio files to Vercel Blob
+      // Step 1: Upload audio files directly to Vercel Blob (client-side)
       const audioUrls: string[] = [];
       for (let i = 0; i < audioFiles.length; i++) {
         const file = audioFiles[i];
-        setTranscriptionProgress(`Uploading ${file.name} (${i + 1}/${audioFiles.length})...`);
+        const sizeMb = (file.size / 1024 / 1024).toFixed(1);
+        setTranscriptionProgress(`Uploading ${file.name} (${sizeMb}MB) - ${i + 1}/${audioFiles.length}...`);
         
-        const formData = new FormData();
-        formData.append("file", file);
-        
-        const uploadRes = await fetch("/api/upload-audio", {
-          method: "POST",
-          body: formData,
+        const blob = await upload(`audio/${Date.now()}-${file.name}`, file, {
+          access: "public",
+          handleUploadUrl: "/api/upload-audio",
         });
         
-        const uploadData = await uploadRes.json();
-        
-        if (!uploadRes.ok) {
-          throw new Error(uploadData.error || "Failed to upload audio");
-        }
-        
-        audioUrls.push(uploadData.url);
+        audioUrls.push(blob.url);
       }
 
       // Step 2: Send URLs to backend for transcription

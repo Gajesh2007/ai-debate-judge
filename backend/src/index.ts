@@ -551,7 +551,7 @@ app.post("/transcribe", requireAuth, async (c) => {
     for (const url of urls) {
       if (!url.includes("blob.vercel-storage.com") && !url.includes("public.blob.vercel-storage.com")) {
         return c.json({ error: "Invalid audio URL - must be from Vercel Blob" }, 400);
-      }
+    }
     }
 
     console.log(`Fetching ${urls.length} audio file(s) from Vercel Blob...`);
