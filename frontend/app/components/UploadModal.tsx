@@ -131,17 +131,39 @@ export function UploadModal({ onClose, onSubmit, isLoading }: UploadModalProps) 
         throw new Error("Please sign in to transcribe audio");
       }
 
-      const formData = new FormData();
-      audioFiles.forEach((file) => formData.append("audio", file));
+      // Step 1: Upload audio files to Vercel Blob
+      const audioUrls: string[] = [];
+      for (let i = 0; i < audioFiles.length; i++) {
+        const file = audioFiles[i];
+        setTranscriptionProgress(`Uploading ${file.name} (${i + 1}/${audioFiles.length})...`);
+        
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        const uploadRes = await fetch("/api/upload-audio", {
+          method: "POST",
+          body: formData,
+        });
+        
+        const uploadData = await uploadRes.json();
+        
+        if (!uploadRes.ok) {
+          throw new Error(uploadData.error || "Failed to upload audio");
+        }
+        
+        audioUrls.push(uploadData.url);
+      }
 
+      // Step 2: Send URLs to backend for transcription
       setTranscriptionProgress("Transcribing... This may take a few minutes for large files.");
 
       const response = await fetch(`${API_URL}/transcribe`, {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: formData,
+        body: JSON.stringify({ audioUrls }),
       });
 
       const data = await response.json();

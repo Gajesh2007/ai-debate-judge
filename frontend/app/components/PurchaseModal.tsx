@@ -75,7 +75,7 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
               </p>
               <SignInButton mode="modal">
                 <button type="button" className="btn-primary w-full">
-                  Sign In with Google
+                  Sign In
                 </button>
               </SignInButton>
             </div>

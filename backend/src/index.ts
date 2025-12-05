@@ -534,21 +534,38 @@ app.post("/verify", async (c) => {
 });
 
 // Transcribe audio only (requires auth to prevent abuse)
+// Accepts either: { audioUrl: "https://..." } or { audioUrls: ["https://...", ...] }
 app.post("/transcribe", requireAuth, async (c) => {
   try {
-    const formData = await c.req.formData();
-    const audioFiles = formData.getAll("audio");
+    const body = await c.req.json();
+    const { audioUrl, audioUrls } = body;
 
-    if (audioFiles.length === 0) {
-      return c.json({ error: "No audio files provided" }, 400);
+    // Support single URL or array of URLs
+    const urls: string[] = audioUrls || (audioUrl ? [audioUrl] : []);
+
+    if (urls.length === 0) {
+      return c.json({ error: "No audio URLs provided" }, 400);
     }
 
-    const audioBuffers: Buffer[] = [];
-    for (const file of audioFiles) {
-      if (file instanceof File) {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        audioBuffers.push(buffer);
+    // Validate URLs (only allow Vercel Blob URLs for security)
+    for (const url of urls) {
+      if (!url.includes("blob.vercel-storage.com") && !url.includes("public.blob.vercel-storage.com")) {
+        return c.json({ error: "Invalid audio URL - must be from Vercel Blob" }, 400);
       }
+    }
+
+    console.log(`Fetching ${urls.length} audio file(s) from Vercel Blob...`);
+
+    // Fetch audio files from URLs
+    const audioBuffers: Buffer[] = [];
+    for (const url of urls) {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch audio from ${url}: ${response.status}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      audioBuffers.push(Buffer.from(arrayBuffer));
+      console.log(`Fetched ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB from Vercel Blob`);
     }
 
     const result = await transcribeAudio(audioBuffers);

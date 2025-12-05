@@ -73,17 +73,28 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const token = await getToken();
+      
+      // Debug: log token status (don't log actual token)
+      console.log("[Credits] Token received:", token ? "present" : "NULL");
+      
+      if (!token) {
+        console.error("[Credits] No token available");
+        return;
+      }
+      
       const res = await fetch(`${API_URL}/credits/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
       const data = await res.json();
+      console.log("[Credits] API response:", data);
+      
       if (data.success) {
         setCredits(data.credits);
       }
-    } catch {
-      // Keep current credits
+    } catch (err) {
+      console.error("[Credits] Error fetching credits:", err);
     } finally {
       setIsLoading(false);
     }

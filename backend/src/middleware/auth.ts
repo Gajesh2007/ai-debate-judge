@@ -18,16 +18,21 @@ export interface AuthContext {
  */
 export async function requireAuth(c: Context, next: Next) {
   try {
+    // Debug: check if auth header exists (don't log token content - PII)
+    const authHeader = c.req.header("Authorization");
+    console.log("[Auth] Authorization header:", authHeader ? "present" : "MISSING");
+    
     // Use authenticateRequest to verify the session
+    // clockSkewInMs: Allow 5 minutes of clock drift between server and Clerk
     const requestState = await clerk.authenticateRequest(c.req.raw, {
-      authorizedParties: [
-        "https://getjudgedbyai.com",
-        "https://www.getjudgedbyai.com",
-        ...(process.env.NODE_ENV !== "production" ? ["http://localhost:3000"] : []),
-      ],
+      clockSkewInMs: 300000, // 5 minutes tolerance
     });
 
     if (!requestState.isSignedIn) {
+      console.log("Auth failed: not signed in", { 
+        reason: requestState.reason,
+        status: requestState.status 
+      });
       return c.json({ error: "Not authenticated" }, 401);
     }
 
