@@ -15,7 +15,7 @@ export function IntroModal({ onClose }: IntroModalProps) {
 
         {/* Subtitle */}
         <p className="text-secondary text-center mb-8">
-          Get your debates analyzed by a council of six frontier AI models.
+          Get your debates analyzed by a council of five frontier AI models.
         </p>
 
         {/* Features */}

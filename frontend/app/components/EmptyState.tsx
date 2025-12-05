@@ -17,7 +17,7 @@ export function EmptyState({ onNewDebate }: EmptyStateProps) {
       {/* Text */}
       <h3 className="text-xl font-medium mb-2">No debates yet</h3>
       <p className="text-secondary mb-8 max-w-md mx-auto">
-        Upload a debate transcript or audio recording to get it analyzed by six AI models.
+        Upload a debate transcript or audio recording to get it analyzed by five AI models.
       </p>
 
       {/* CTA */}
