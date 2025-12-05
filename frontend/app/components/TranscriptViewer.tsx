@@ -20,9 +20,13 @@ const SPEAKER_COLORS = [
 export function TranscriptViewer({ transcript }: TranscriptViewerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Safety check
+  const speakers = transcript?.speakers || [];
+  const segments = transcript?.segments || [];
+
   // Map speakers to colors
   const speakerColors: Record<string, string> = {};
-  transcript.speakers.forEach((speaker, index) => {
+  speakers.forEach((speaker, index) => {
     speakerColors[speaker.id] = SPEAKER_COLORS[index % SPEAKER_COLORS.length];
   });
 
@@ -54,7 +58,7 @@ export function TranscriptViewer({ transcript }: TranscriptViewerProps) {
       {isExpanded && (
         <div className="border-t border-subtle">
           <div className="p-6 space-y-4 max-h-[600px] overflow-y-auto">
-            {transcript.segments.map((segment, index) => (
+            {segments.map((segment, index) => (
               <div key={index} className="flex gap-3">
                 <div className="flex-shrink-0 w-24">
                   <span className={`font-mono text-xs font-medium ${speakerColors[segment.speaker] || "text-secondary"}`}>
@@ -78,7 +82,7 @@ export function TranscriptViewer({ transcript }: TranscriptViewerProps) {
             <button
               type="button"
               onClick={() => {
-                const text = transcript.segments
+                const text = segments
                   .map((s) => `[${s.speaker}]: ${s.text}`)
                   .join("\n\n");
                 navigator.clipboard.writeText(text);
@@ -93,7 +97,7 @@ export function TranscriptViewer({ transcript }: TranscriptViewerProps) {
             <button
               type="button"
               onClick={() => {
-                const text = transcript.segments
+                const text = segments
                   .map((s) => `[${s.speaker}]: ${s.text}`)
                   .join("\n\n");
                 const blob = new Blob([text], { type: "text/plain" });

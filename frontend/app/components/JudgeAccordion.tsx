@@ -42,6 +42,16 @@ function getModelColor(name: string): { text: string; bg: string } {
 export function JudgeAccordion({ judgments, winner }: JudgeAccordionProps) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
+  // Safety check
+  if (!judgments || judgments.length === 0) {
+    return (
+      <div className="card p-6">
+        <h3 className="text-lg font-medium mb-2">Council reasoning</h3>
+        <p className="text-secondary">No judge evaluations available.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="card overflow-hidden">
       <h3 className="text-lg font-medium p-6 pb-4">Council reasoning</h3>

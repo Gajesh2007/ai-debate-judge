@@ -15,7 +15,7 @@ const DIMENSIONS = [
 ] as const;
 
 export function ScoreBreakdown({ scores, winner }: ScoreBreakdownProps) {
-  if (scores.length < 2) return null;
+  if (!scores || scores.length < 2) return null;
 
   // Find the winner and their main opponent (exclude moderators, hosts, etc.)
   const winnerScore = scores.find(s => s.speaker === winner);

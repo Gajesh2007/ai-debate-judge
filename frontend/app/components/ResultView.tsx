@@ -32,19 +32,26 @@ export function ResultView({ result, onBack, debateId }: ResultViewProps) {
   const { signedVerdict, formattedTranscript } = result;
   const { verdict } = signedVerdict;
   
-  const totalVotes = Object.values(verdict.voteCount).reduce((a, b) => a + b, 0);
-  const winnerVotes = verdict.voteCount[verdict.finalWinner] || 0;
-  const opponents = Object.keys(verdict.voteCount).filter(s => s !== verdict.finalWinner);
+  // Safe access with fallbacks
+  const voteCount = verdict.voteCount || {};
+  const individualJudgments = verdict.individualJudgments || [];
+  const averageScores = verdict.averageScores || [];
+  
+  const totalVotes = Object.values(voteCount).reduce((a, b) => a + b, 0);
+  const winnerVotes = voteCount[verdict.finalWinner] || 0;
+  const opponents = Object.keys(voteCount).filter(s => s !== verdict.finalWinner);
   const opponent = opponents[0] || "Opposition";
-  const opponentVotes = verdict.voteCount[opponent] || 0;
+  const opponentVotes = voteCount[opponent] || 0;
   
   // Use vote count for percentages (how many judges voted for each side)
   const winnerPercent = totalVotes > 0 ? Math.round((winnerVotes / totalVotes) * 100) : 50;
 
-  const avgConfidence = Math.round(
-    verdict.individualJudgments.reduce((sum, j) => sum + j.evaluation.confidence, 0) / 
-    verdict.individualJudgments.length
-  );
+  const avgConfidence = individualJudgments.length > 0
+    ? Math.round(
+        individualJudgments.reduce((sum, j) => sum + (j.evaluation?.confidence || 0), 0) / 
+        individualJudgments.length
+      )
+    : 0;
 
   // Build shareable URL
   const shareId = debateId || result.id;
@@ -162,7 +169,7 @@ export function ResultView({ result, onBack, debateId }: ResultViewProps) {
       {/* Score breakdown */}
       <div className="mb-6 animate-fade-in delay-1">
         <ScoreBreakdown 
-          scores={verdict.averageScores} 
+          scores={averageScores} 
           winner={verdict.finalWinner}
         />
       </div>
@@ -170,7 +177,7 @@ export function ResultView({ result, onBack, debateId }: ResultViewProps) {
       {/* Council reasoning */}
       <div className="mb-6 animate-fade-in delay-2">
         <JudgeAccordion 
-          judgments={verdict.individualJudgments}
+          judgments={individualJudgments}
           winner={verdict.finalWinner}
         />
       </div>
@@ -300,10 +307,10 @@ export function ResultView({ result, onBack, debateId }: ResultViewProps) {
       <div className="card p-6 mt-6 animate-fade-in delay-4">
         <h3 className="text-lg font-medium mb-4">Debate summary</h3>
         <p className="text-secondary leading-relaxed mb-4">
-          {formattedTranscript.summary}
+          {formattedTranscript?.summary || "No summary available."}
         </p>
         <div className="flex flex-wrap gap-2">
-          {formattedTranscript.speakers.map((speaker) => (
+          {(formattedTranscript?.speakers || []).map((speaker) => (
             <span key={speaker.id} className="chip">
               {speaker.id} · {speaker.position}
             </span>

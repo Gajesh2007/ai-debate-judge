@@ -27,24 +27,28 @@ export default function DebatePage({ params }: { params: Promise<{ id: string }>
         }
 
         const judgment = data.judgment;
+        
+        if (!judgment) {
+          throw new Error("Judgment data is missing");
+        }
 
-        // Parse JSON fields if they're strings
+        // Parse JSON fields if they're strings (with fallbacks)
         const voteCount =
           typeof judgment.voteCount === "string"
             ? JSON.parse(judgment.voteCount)
-            : judgment.voteCount;
+            : judgment.voteCount || {};
         const averageScores =
           typeof judgment.averageScores === "string"
             ? JSON.parse(judgment.averageScores)
-            : judgment.averageScores;
+            : judgment.averageScores || [];
         const formattedTranscript =
           typeof judgment.formattedTranscript === "string"
             ? JSON.parse(judgment.formattedTranscript)
-            : judgment.formattedTranscript;
+            : judgment.formattedTranscript || { topic: "", speakers: [], segments: [], summary: "" };
         const individualJudgments =
           typeof judgment.individualJudgments === "string"
             ? JSON.parse(judgment.individualJudgments)
-            : judgment.individualJudgments;
+            : judgment.individualJudgments || [];
 
         const judgeResponse: JudgeResponse = {
           success: true,
