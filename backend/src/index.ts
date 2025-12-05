@@ -438,11 +438,21 @@ app.get("/judgments/:id", async (c) => {
       return c.json({ error: "Judgment not found" }, 404);
     }
 
-    // Reconstruct prompts from the transcript for transparency
-    const prompts = judgment.formattedTranscript ? {
-      system: JUDGE_SYSTEM_PROMPT,
-      user: buildJudgePrompt(judgment.formattedTranscript),
-    } : null;
+    // Parse formattedTranscript if it's a string (from DB JSON column)
+    let prompts = null;
+    if (judgment.formattedTranscript) {
+      const transcript = typeof judgment.formattedTranscript === "string"
+        ? JSON.parse(judgment.formattedTranscript)
+        : judgment.formattedTranscript;
+      
+      // Validate the transcript has required fields before building prompt
+      if (transcript?.speakers?.length && transcript?.segments?.length) {
+        prompts = {
+          system: JUDGE_SYSTEM_PROMPT,
+          user: buildJudgePrompt(transcript),
+        };
+      }
+    }
 
     return c.json({ success: true, judgment, prompts });
   } catch (error) {
